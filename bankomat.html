@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BANKOMAT — ATM Web App</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f0f13;--bg2:#1a1a24;--bg3:#22223a;--card:#1e1e2e;--card2:#252535;
+  --accent:#7c6af7;--accent2:#a78bfa;--green:#22c55e;--red:#ef4444;--amber:#f59e0b;
+  --text:#f1f0ff;--text2:#a09ec0;--text3:#6b6a8a;--border:#2e2d4a;
+  --success:#16a34a;--danger:#dc2626;
+  --font:'Segoe UI',system-ui,sans-serif;
+}
+.light{
+  --bg:#f0f0f8;--bg2:#e8e8f0;--bg3:#ddddf0;--card:#ffffff;--card2:#f5f5ff;
+  --text:#1a1a2e;--text2:#4a4a6a;--text3:#8888aa;--border:#d0d0e8;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh;overflow-x:hidden}
+#app{max-width:760px;margin:0 auto;padding:12px;min-height:580px;position:relative}
+
+#loading{position:absolute;inset:0;background:var(--bg);z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;min-height:500px}
+.atm-logo{font-size:48px;font-weight:700;letter-spacing:-2px}
+.atm-logo span{color:var(--accent)}
+.load-bar{width:200px;height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+.load-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:2px;animation:load 2s ease forwards}
+@keyframes load{from{width:0}to{width:100%}}
+.load-text{font-size:13px;color:var(--text3);animation:blink 1s infinite}
+@keyframes blink{50%{opacity:0.3}}
+
+.panel{display:none;animation:fadeIn 0.3s ease}
+.panel.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+#loginPanel{display:flex;flex-direction:column;align-items:center;padding:20px 0}
+.login-card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:32px;width:100%;max-width:360px}
+.login-title{font-size:22px;font-weight:600;text-align:center;margin-bottom:6px}
+.login-sub{font-size:13px;color:var(--text3);text-align:center;margin-bottom:28px}
+.pin-dots{display:flex;gap:12px;justify-content:center;margin-bottom:24px}
+.pin-dot{width:16px;height:16px;border-radius:50%;border:2px solid var(--border);transition:all 0.2s}
+.pin-dot.filled{background:var(--accent);border-color:var(--accent);transform:scale(1.15)}
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.key{background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:16px;font-size:20px;font-weight:600;cursor:pointer;text-align:center;color:var(--text);transition:all 0.15s;user-select:none}
+.key:hover{background:var(--bg3);border-color:var(--accent)}
+.key:active{transform:scale(0.92);background:var(--accent);color:#fff}
+.key.del{font-size:14px;color:var(--text2)}
+.key.enter{background:var(--accent);color:#fff;border-color:var(--accent)}
+.key.enter:hover{opacity:0.9}
+.login-msg{text-align:center;font-size:13px;margin-top:12px;min-height:18px;color:var(--red)}
+.login-msg.success{color:var(--green)}
+.remember-row{display:flex;align-items:center;gap:8px;justify-content:center;margin-bottom:16px;font-size:13px;color:var(--text2)}
+.remember-row input{width:15px;height:15px;accent-color:var(--accent)}
+.locked-msg{text-align:center;color:var(--amber);font-size:14px;margin-top:8px}
+
+#mainPanel{padding-top:0}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:0 0 12px;border-bottom:1px solid var(--border);margin-bottom:16px}
+.topbar-left{display:flex;align-items:center;gap:10px}
+.topbar-logo{font-size:18px;font-weight:700;color:var(--accent)}
+.topbar-user{font-size:13px;color:var(--text2)}
+.topbar-right{display:flex;align-items:center;gap:8px}
+.icon-btn{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:7px 10px;cursor:pointer;font-size:13px;color:var(--text2);transition:all 0.2s}
+.icon-btn:hover{background:var(--bg3);color:var(--text)}
+
+.atm-card{background:linear-gradient(135deg,#534AB7 0%,#7c6af7 50%,#a78bfa 100%);border-radius:18px;padding:22px 24px;margin-bottom:16px;position:relative;overflow:hidden;color:#fff}
+.atm-card::before{content:'';position:absolute;top:-30px;right:-30px;width:140px;height:140px;border-radius:50%;background:rgba(255,255,255,0.08)}
+.atm-card::after{content:'';position:absolute;bottom:-40px;left:-20px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,0.05)}
+.card-chip{width:36px;height:28px;background:rgba(255,220,100,0.8);border-radius:5px;margin-bottom:14px}
+.card-num{font-size:15px;letter-spacing:3px;font-weight:500;margin-bottom:14px;font-family:monospace}
+.card-bottom{display:flex;justify-content:space-between;align-items:flex-end}
+.card-name{font-size:13px;font-weight:600;letter-spacing:1px;opacity:0.9}
+.card-balance-label{font-size:10px;opacity:0.7;text-align:right}
+.card-balance-val{font-size:18px;font-weight:700;text-align:right}
+
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 14px}
+.stat-label{font-size:11px;color:var(--text3);margin-bottom:4px}
+.stat-val{font-size:17px;font-weight:600}
+.stat-val.green{color:var(--green)}
+.stat-val.red{color:var(--red)}
+
+.nav-tabs{display:flex;gap:6px;margin-bottom:16px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:5px}
+.tab{flex:1;padding:8px 4px;text-align:center;font-size:12px;font-weight:500;border-radius:10px;cursor:pointer;color:var(--text2);transition:all 0.2s;white-space:nowrap}
+.tab.active{background:var(--accent);color:#fff}
+.tab:hover:not(.active){background:var(--bg3);color:var(--text)}
+
+.tab-content{display:none}
+.tab-content.active{display:block;animation:fadeIn 0.25s ease}
+
+.input-group{margin-bottom:14px}
+.input-label{font-size:12px;color:var(--text3);margin-bottom:6px}
+.amt-input{width:100%;background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;font-size:16px;font-weight:600;color:var(--text);outline:none;transition:border 0.2s}
+.amt-input:focus{border-color:var(--accent)}
+.quick-btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.qbtn{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer;color:var(--text2);transition:all 0.15s}
+.qbtn:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+.action-btn{width:100%;padding:14px;border-radius:14px;font-size:15px;font-weight:600;cursor:pointer;border:none;transition:all 0.2s;margin-top:4px}
+.action-btn.deposit{background:var(--green);color:#fff}
+.action-btn.withdraw{background:var(--accent);color:#fff}
+.action-btn.transfer{background:var(--amber);color:#000}
+.action-btn:hover{opacity:0.88;transform:translateY(-1px)}
+.action-btn:active{transform:scale(0.97)}
+.action-result{min-height:36px;padding:8px 12px;border-radius:10px;font-size:13px;font-weight:500;margin-top:10px;display:none;animation:fadeIn 0.2s}
+.action-result.show{display:block}
+.action-result.ok{background:rgba(34,197,94,0.15);color:var(--green);border:1px solid rgba(34,197,94,0.3)}
+.action-result.err{background:rgba(239,68,68,0.15);color:var(--red);border:1px solid rgba(239,68,68,0.3)}
+
+.hist-list{max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding-right:2px}
+.hist-item{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px 14px;display:flex;align-items:center;gap:12px}
+.hist-icon{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.hist-icon.dep{background:rgba(34,197,94,0.15)}
+.hist-icon.wit{background:rgba(124,106,247,0.15)}
+.hist-icon.tra{background:rgba(245,158,11,0.15)}
+.hist-icon.rew{background:rgba(236,72,153,0.15)}
+.hist-icon.int{background:rgba(14,165,233,0.15)}
+.hist-meta{flex:1;min-width:0}
+.hist-desc{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hist-time{font-size:11px;color:var(--text3)}
+.hist-amt{font-size:14px;font-weight:700}
+.hist-amt.pos{color:var(--green)}
+.hist-amt.neg{color:var(--red)}
+.hist-empty{text-align:center;color:var(--text3);padding:32px 0;font-size:14px}
+.clear-hist{background:none;border:1px solid var(--border);border-radius:10px;padding:7px 14px;font-size:12px;cursor:pointer;color:var(--text3);float:right;margin-bottom:10px;transition:all 0.2s}
+.clear-hist:hover{color:var(--red);border-color:var(--red)}
+
+.analytics-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.ana-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px}
+.ana-label{font-size:11px;color:var(--text3);margin-bottom:4px}
+.ana-val{font-size:20px;font-weight:700}
+canvas#chart{width:100%;height:140px;display:block}
+.chart-wrap{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px}
+.chart-title{font-size:12px;color:var(--text3);margin-bottom:8px}
+
+.reward-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;text-align:center;margin-bottom:12px}
+.interest-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px}
+.interest-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
+.interest-row:last-child{border-bottom:none}
+
+.settings-list{display:flex;flex-direction:column;gap:8px}
+.setting-item{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between}
+.setting-left{font-size:14px;font-weight:500}
+.setting-sub{font-size:12px;color:var(--text3);margin-top:2px}
+.toggle{width:42px;height:24px;background:var(--border);border-radius:12px;cursor:pointer;position:relative;transition:background 0.2s}
+.toggle.on{background:var(--accent)}
+.toggle::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform 0.2s}
+.toggle.on::after{transform:translateX(18px)}
+.currency-sel{background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:5px 10px;color:var(--text);font-size:13px;outline:none;cursor:pointer}
+.danger-btn{background:none;border:1px solid var(--red);color:var(--red);border-radius:10px;padding:8px 16px;font-size:13px;cursor:pointer;transition:all 0.2s}
+.danger-btn:hover{background:var(--red);color:#fff}
+
+.admin-badge{background:rgba(245,158,11,0.2);color:var(--amber);border:1px solid rgba(245,158,11,0.3);border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600}
+.admin-section{background:rgba(245,158,11,0.05);border:1px solid rgba(245,158,11,0.2);border-radius:14px;padding:16px;margin-bottom:10px}
+.admin-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.admin-val{font-size:11px;color:var(--text3)}
+
+.cash-fly{position:fixed;pointer-events:none;z-index:999;font-size:22px;animation:flyMoney 1.2s ease forwards}
+@keyframes flyMoney{0%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(-90px) scale(0.5)}}
+
+.toast{position:fixed;bottom:20px;right:20px;z-index:200;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 18px;font-size:13px;font-weight:500;box-shadow:0 4px 24px rgba(0,0,0,0.3);animation:toastIn 0.3s ease;display:none}
+.toast.show{display:block}
+@keyframes toastIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body>
+<div id="app">
+
+<div id="loading">
+  <div class="atm-logo">BANK<span>O</span>MAT</div>
+  <div style="font-size:13px;color:var(--text3)">Secure Banking System v2.4</div>
+  <div class="load-bar"><div class="load-fill"></div></div>
+  <div class="load-text">Initializing secure session...</div>
+</div>
+
+<div id="loginPanel" class="panel" style="padding-top:16px">
+  <div style="text-align:center;margin-bottom:20px">
+    <div style="font-size:24px;font-weight:700;color:var(--accent)">BANKOMAT</div>
+    <div style="font-size:12px;color:var(--text3)">Secure · Fast · Reliable</div>
+  </div>
+  <div class="login-card">
+    <div class="login-title">Welcome Back</div>
+    <div class="login-sub">Enter your 4-digit PIN</div>
+    <div class="pin-dots">
+      <div class="pin-dot" id="d0"></div>
+      <div class="pin-dot" id="d1"></div>
+      <div class="pin-dot" id="d2"></div>
+      <div class="pin-dot" id="d3"></div>
+    </div>
+    <div class="remember-row">
+      <input type="checkbox" id="rememberMe"> Remember me
+    </div>
+    <div class="keypad">
+      <div class="key" onclick="pinKey(1)">1</div>
+      <div class="key" onclick="pinKey(2)">2</div>
+      <div class="key" onclick="pinKey(3)">3</div>
+      <div class="key" onclick="pinKey(4)">4</div>
+      <div class="key" onclick="pinKey(5)">5</div>
+      <div class="key" onclick="pinKey(6)">6</div>
+      <div class="key" onclick="pinKey(7)">7</div>
+      <div class="key" onclick="pinKey(8)">8</div>
+      <div class="key" onclick="pinKey(9)">9</div>
+      <div class="key del" onclick="pinDel()">DEL</div>
+      <div class="key" onclick="pinKey(0)">0</div>
+      <div class="key enter" onclick="pinEnter()">OK</div>
+    </div>
+    <div class="login-msg" id="loginMsg"></div>
+    <div class="locked-msg" id="lockedMsg" style="display:none"></div>
+  </div>
+</div>
+
+<div id="mainPanel" class="panel" style="display:none">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-logo">BANKOMAT</div>
+      <div class="topbar-user" id="topUser">Hello, User</div>
+    </div>
+    <div class="topbar-right">
+      <div class="icon-btn" onclick="toggleTheme()" title="Toggle theme">&#9680;</div>
+      <div id="adminBadge" class="admin-badge" style="display:none">ADMIN</div>
+      <div class="icon-btn" onclick="logout()">Logout</div>
+    </div>
+  </div>
+
+  <div class="atm-card" id="atmCard">
+    <div class="card-chip"></div>
+    <div class="card-num" id="cardNum">•••• •••• •••• ••••</div>
+    <div class="card-bottom">
+      <div class="card-name" id="cardName">USER</div>
+      <div>
+        <div class="card-balance-label">BALANCE</div>
+        <div class="card-balance-val" id="cardBal">$0.00</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-label">Total Deposited</div>
+      <div class="stat-val green" id="statDep">$0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Withdrawn</div>
+      <div class="stat-val red" id="statWit">$0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Net Change</div>
+      <div class="stat-val" id="statNet">$0</div>
+    </div>
+  </div>
+
+  <div class="nav-tabs">
+    <div class="tab active" onclick="switchTab('deposit')">Deposit</div>
+    <div class="tab" onclick="switchTab('withdraw')">Withdraw</div>
+    <div class="tab" onclick="switchTab('transfer')">Transfer</div>
+    <div class="tab" onclick="switchTab('history')">History</div>
+    <div class="tab" onclick="switchTab('analytics')">Stats</div>
+    <div class="tab" onclick="switchTab('settings')">Settings</div>
+  </div>
+
+  <div id="tab-deposit" class="tab-content active">
+    <div class="input-group">
+      <div class="input-label">Amount to Deposit</div>
+      <input type="number" class="amt-input" id="depAmt" placeholder="Enter amount" min="1">
+      <div class="quick-btns">
+        <div class="qbtn" onclick="setAmt('depAmt',10)">+10</div>
+        <div class="qbtn" onclick="setAmt('depAmt',20)">+20</div>
+        <div class="qbtn" onclick="setAmt('depAmt',50)">+50</div>
+        <div class="qbtn" onclick="setAmt('depAmt',100)">+100</div>
+        <div class="qbtn" onclick="setAmt('depAmt',200)">+200</div>
+        <div class="qbtn" onclick="setAmt('depAmt',500)">+500</div>
+      </div>
+    </div>
+    <button class="action-btn deposit" onclick="doDeposit()">Deposit Funds</button>
+    <div class="action-result" id="depResult"></div>
+  </div>
+
+  <div id="tab-withdraw" class="tab-content">
+    <div class="input-group">
+      <div class="input-label">Amount to Withdraw</div>
+      <input type="number" class="amt-input" id="witAmt" placeholder="Enter amount" min="1">
+      <div class="quick-btns">
+        <div class="qbtn" onclick="setAmt('witAmt',10)">10</div>
+        <div class="qbtn" onclick="setAmt('witAmt',20)">20</div>
+        <div class="qbtn" onclick="setAmt('witAmt',50)">50</div>
+        <div class="qbtn" onclick="setAmt('witAmt',100)">100</div>
+        <div class="qbtn" onclick="setAmt('witAmt',200)">200</div>
+        <div class="qbtn" onclick="setAmt('witAmt',500)">500</div>
+      </div>
+    </div>
+    <button class="action-btn withdraw" onclick="doWithdraw()">Withdraw Cash</button>
+    <div class="action-result" id="witResult"></div>
+  </div>
+
+  <div id="tab-transfer" class="tab-content">
+    <div class="input-group">
+      <div class="input-label">Recipient Username</div>
+      <input type="text" class="amt-input" id="traTo" placeholder="e.g. alice, bob, john" style="font-size:14px;font-weight:400">
+      <div class="quick-btns">
+        <div class="qbtn" onclick="document.getElementById('traTo').value='alice'">alice</div>
+        <div class="qbtn" onclick="document.getElementById('traTo').value='bob'">bob</div>
+        <div class="qbtn" onclick="document.getElementById('traTo').value='carol'">carol</div>
+        <div class="qbtn" onclick="document.getElementById('traTo').value='dave'">dave</div>
+      </div>
+    </div>
+    <div class="input-group">
+      <div class="input-label">Amount</div>
+      <input type="number" class="amt-input" id="traAmt" placeholder="Enter amount" min="1">
+    </div>
+    <button class="action-btn transfer" onclick="doTransfer()">Send Transfer</button>
+    <div class="action-result" id="traResult"></div>
+  </div>
+
+  <div id="tab-history" class="tab-content">
+    <button class="clear-hist" onclick="clearHistory()">Clear All</button>
+    <div style="clear:both"></div>
+    <div class="hist-list" id="histList"></div>
+  </div>
+
+  <div id="tab-analytics" class="tab-content">
+    <div class="analytics-grid">
+      <div class="ana-card"><div class="ana-label">Total Transactions</div><div class="ana-val" id="anaTx">0</div></div>
+      <div class="ana-card"><div class="ana-label">Avg Transaction</div><div class="ana-val" id="anaAvg">$0</div></div>
+      <div class="ana-card"><div class="ana-label">Largest Deposit</div><div class="ana-val" id="anaLDep">$0</div></div>
+      <div class="ana-card"><div class="ana-label">Largest Withdraw</div><div class="ana-val" id="anaLWit">$0</div></div>
+    </div>
+    <div class="chart-wrap">
+      <div class="chart-title">Balance trend (last 10 transactions)</div>
+      <canvas id="chart" height="130"></canvas>
+    </div>
+    <div style="margin-top:12px">
+      <div class="interest-card">
+        <div class="interest-row"><span style="color:var(--text2)">Daily reward</span><span id="dailyStatus" style="color:var(--green)">Available</span></div>
+        <div class="interest-row"><span style="color:var(--text2)">Interest earned today</span><span id="intEarned" style="color:var(--green)">$0.00</span></div>
+        <div class="interest-row"><span style="color:var(--text2)">Interest rate</span><span style="color:var(--accent)">0.1% / min</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-settings" class="tab-content">
+    <div class="settings-list">
+      <div class="setting-item">
+        <div><div class="setting-left">Dark Mode</div><div class="setting-sub">Toggle light / dark theme</div></div>
+        <div class="toggle" id="themeToggle" onclick="toggleTheme()"></div>
+      </div>
+      <div class="setting-item">
+        <div><div class="setting-left">Currency</div><div class="setting-sub">Display currency symbol</div></div>
+        <select class="currency-sel" id="currSel" onchange="setCurrency(this.value)">
+          <option value="$">$ USD</option>
+          <option value="€">€ EUR</option>
+          <option value="₼">₼ AZN</option>
+          <option value="£">£ GBP</option>
+        </select>
+      </div>
+      <div class="setting-item">
+        <div><div class="setting-left">Daily Reward</div><div class="setting-sub">Claim your bonus</div></div>
+        <button class="action-btn deposit" id="rewardBtn" style="width:auto;padding:8px 16px;font-size:13px;margin:0" onclick="claimReward()">Claim</button>
+      </div>
+      <div class="setting-item" id="adminSection" style="display:none">
+        <div><div class="setting-left" style="color:var(--amber)">Admin Panel</div><div class="setting-sub">PIN 0000 unlocked</div></div>
+        <button class="action-btn" style="width:auto;padding:8px 14px;font-size:13px;margin:0;background:var(--amber);color:#000" onclick="switchTab('admin')">Open</button>
+      </div>
+      <div class="setting-item" style="border-color:rgba(239,68,68,0.3)">
+        <div><div class="setting-left" style="color:var(--red)">Reset Account</div><div class="setting-sub">Clear all data and restart</div></div>
+        <button class="danger-btn" onclick="resetAccount()">Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-admin" class="tab-content">
+    <div class="admin-section">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <div style="font-size:15px;font-weight:600;color:var(--amber)">Admin Control Panel</div>
+        <div class="admin-badge">SECRET</div>
+      </div>
+      <div class="admin-grid">
+        <div><div class="admin-val">System Balance</div><div style="font-size:18px;font-weight:700" id="adminBal">$0</div></div>
+        <div><div class="admin-val">Total Transactions</div><div style="font-size:18px;font-weight:700" id="adminTxCount">0</div></div>
+      </div>
+    </div>
+    <div class="input-group" style="margin-top:10px">
+      <div class="input-label">Set Balance Directly</div>
+      <input type="number" class="amt-input" id="adminSetBal" placeholder="Enter new balance">
+    </div>
+    <button class="action-btn" style="background:var(--amber);color:#000" onclick="adminSetBalance()">Set Balance</button>
+    <div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <button class="action-btn deposit" style="margin:0" onclick="adminAddMillion()">Add $10,000</button>
+      <button class="action-btn" style="background:var(--text3);color:#fff;margin:0" onclick="switchTab('deposit')">Back</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+</div>
+
+<script>
+var state={
+  pin:'1234',adminPin:'0000',balance:1000,transactions:[],
+  totalDep:0,totalWit:0,isAdmin:false,currency:'$',isDark:true,
+  cardNum:'',interestEarned:0,lastInterestTime:Date.now(),balanceHistory:[]
+};
+var pinBuf='',wrongAttempts=0,lockUntil=0,interestInterval;
+
+function ls(k,v){if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}
+function lsJ(k,v){if(v===undefined){var r=ls(k);return r?JSON.parse(r):null}ls(k,JSON.stringify(v))}
+
+function init(){
+  var saved=lsJ('bankomat_state');
+  if(saved){
+    state.balance=saved.balance||1000;
+    state.transactions=saved.transactions||[];
+    state.totalDep=saved.totalDep||0;
+    state.totalWit=saved.totalWit||0;
+    state.currency=saved.currency||'$';
+    state.isDark=saved.isDark!==undefined?saved.isDark:true;
+    state.cardNum=saved.cardNum||genCard();
+    state.interestEarned=saved.interestEarned||0;
+    state.lastInterestTime=saved.lastInterestTime||Date.now();
+    state.balanceHistory=saved.balanceHistory||[state.balance];
+  } else {
+    state.cardNum=genCard();
+    state.balanceHistory=[state.balance];
+    saveState();
+  }
+  applyTheme();
+  var rem=ls('bankomat_remember');
+  if(rem==='1'){setTimeout(()=>showMain(false),2200);}
+  setTimeout(()=>{
+    document.getElementById('loading').style.display='none';
+    document.getElementById('loginPanel').classList.add('active');
+    document.getElementById('loginPanel').style.display='flex';
+  },2200);
+  startInterest();
+}
+
+function saveState(){
+  lsJ('bankomat_state',{
+    balance:state.balance,transactions:state.transactions,
+    totalDep:state.totalDep,totalWit:state.totalWit,
+    currency:state.currency,isDark:state.isDark,cardNum:state.cardNum,
+    interestEarned:state.interestEarned,lastInterestTime:state.lastInterestTime,
+    balanceHistory:state.balanceHistory
+  });
+}
+
+function genCard(){return['****','****','****',Math.floor(1000+Math.random()*9000)].join(' ');}
+function fmt(n){return state.currency+parseFloat(n).toFixed(2)}
+function applyTheme(){
+  if(state.isDark)document.body.classList.remove('light');
+  else document.body.classList.add('light');
+  var tog=document.getElementById('themeToggle');
+  if(tog){if(!state.isDark)tog.classList.add('on');else tog.classList.remove('on');}
+}
+
+function pinKey(n){
+  if(lockUntil>Date.now())return;
+  if(pinBuf.length>=4)return;
+  pinBuf+=n;
+  for(var i=0;i<pinBuf.length;i++)document.getElementById('d'+i).classList.add('filled');
+}
+function pinDel(){
+  if(pinBuf.length>0){
+    document.getElementById('d'+(pinBuf.length-1)).classList.remove('filled');
+    pinBuf=pinBuf.slice(0,-1);
+  }
+}
+function pinEnter(){
+  if(lockUntil>Date.now())return;
+  if(pinBuf.length<4){document.getElementById('loginMsg').textContent='Please enter 4 digits';return;}
+  if(pinBuf===state.adminPin){state.isAdmin=true;showMain(true);return;}
+  if(pinBuf===state.pin){
+    wrongAttempts=0;
+    document.getElementById('loginMsg').className='login-msg success';
+    document.getElementById('loginMsg').textContent='Access granted!';
+    if(document.getElementById('rememberMe').checked)ls('bankomat_remember','1');
+    else ls('bankomat_remember','0');
+    setTimeout(()=>showMain(false),600);
+  } else {
+    wrongAttempts++;
+    pinBuf='';
+    for(var i=0;i<4;i++)document.getElementById('d'+i).classList.remove('filled');
+    if(wrongAttempts>=3){
+      lockUntil=Date.now()+10000;
+      document.getElementById('loginMsg').textContent='';
+      document.getElementById('lockedMsg').style.display='block';
+      var countdown=10;
+      var t=setInterval(()=>{
+        document.getElementById('lockedMsg').textContent='Locked! Try again in '+countdown+'s';
+        countdown--;
+        if(countdown<0){clearInterval(t);wrongAttempts=0;lockUntil=0;document.getElementById('lockedMsg').style.display='none';}
+      },1000);
+    } else {
+      document.getElementById('loginMsg').className='login-msg';
+      document.getElementById('loginMsg').textContent='Wrong PIN. '+(3-wrongAttempts)+' attempts left.';
+    }
+  }
+}
+
+function showMain(isAdmin){
+  document.getElementById('loginPanel').style.display='none';
+  document.getElementById('mainPanel').style.display='block';
+  document.getElementById('mainPanel').classList.add('active');
+  if(isAdmin||state.isAdmin){
+    state.isAdmin=true;
+    document.getElementById('adminBadge').style.display='inline-block';
+    document.getElementById('adminSection').style.display='flex';
+    document.getElementById('topUser').textContent='Hello, Admin';
+  } else {
+    document.getElementById('topUser').textContent='Hello, User';
+  }
+  updateUI();
+}
+
+function logout(){
+  ls('bankomat_remember','0');state.isAdmin=false;pinBuf='';
+  for(var i=0;i<4;i++)document.getElementById('d'+i).classList.remove('filled');
+  document.getElementById('mainPanel').style.display='none';
+  document.getElementById('loginPanel').style.display='flex';
+  document.getElementById('loginMsg').textContent='';
+}
+
+function updateUI(){
+  document.getElementById('cardBal').textContent=fmt(state.balance);
+  document.getElementById('cardNum').textContent=state.cardNum;
+  document.getElementById('cardName').textContent=state.isAdmin?'ADMIN USER':'ACCOUNT USER';
+  document.getElementById('statDep').textContent=fmt(state.totalDep);
+  document.getElementById('statWit').textContent=fmt(state.totalWit);
+  var net=state.totalDep-state.totalWit;
+  var netEl=document.getElementById('statNet');
+  netEl.textContent=(net>=0?'+':'')+fmt(net);
+  netEl.className='stat-val '+(net>=0?'green':'red');
+  if(document.getElementById('adminBal'))document.getElementById('adminBal').textContent=fmt(state.balance);
+  if(document.getElementById('adminTxCount'))document.getElementById('adminTxCount').textContent=state.transactions.length;
+  if(document.getElementById('currSel'))document.getElementById('currSel').value=state.currency;
+  updateAnalytics();renderHistory();checkDailyReward();updateInterestDisplay();drawChart();
+}
+
+function addTransaction(type,amount,note){
+  var tx={type,amount,note,time:Date.now(),bal:state.balance};
+  state.transactions.unshift(tx);
+  state.balanceHistory.push(state.balance);
+  if(state.balanceHistory.length>20)state.balanceHistory.shift();
+  saveState();updateUI();
+}
+
+function doDeposit(){
+  var v=parseFloat(document.getElementById('depAmt').value);
+  var r=document.getElementById('depResult');
+  if(!v||v<=0){showResult(r,'err','Please enter a valid amount.');return;}
+  if(v>1000000){showResult(r,'err','Maximum deposit is '+fmt(1000000));return;}
+  state.balance+=v;state.totalDep+=v;
+  addTransaction('dep',v,'Deposit');
+  showResult(r,'ok','Deposited '+fmt(v)+' successfully!');
+  document.getElementById('depAmt').value='';
+  flyMoney();showToast('Deposit of '+fmt(v)+' confirmed');
+}
+
+function doWithdraw(){
+  var v=parseFloat(document.getElementById('witAmt').value);
+  var r=document.getElementById('witResult');
+  if(!v||v<=0){showResult(r,'err','Please enter a valid amount.');return;}
+  if(v>state.balance){showResult(r,'err','Insufficient funds! Balance: '+fmt(state.balance));return;}
+  state.balance-=v;state.totalWit+=v;
+  addTransaction('wit',v,'Withdrawal');
+  showResult(r,'ok','Withdrawn '+fmt(v)+'. Remaining: '+fmt(state.balance));
+  document.getElementById('witAmt').value='';
+  flyMoney();showToast('Cash dispensed: '+fmt(v));
+}
+
+function doTransfer(){
+  var to=document.getElementById('traTo').value.trim();
+  var v=parseFloat(document.getElementById('traAmt').value);
+  var r=document.getElementById('traResult');
+  if(!to){showResult(r,'err','Please enter a recipient.');return;}
+  if(!v||v<=0){showResult(r,'err','Please enter a valid amount.');return;}
+  if(v>state.balance){showResult(r,'err','Insufficient funds! Balance: '+fmt(state.balance));return;}
+  state.balance-=v;state.totalWit+=v;
+  addTransaction('tra',v,'Transfer to @'+to);
+  showResult(r,'ok','Sent '+fmt(v)+' to @'+to);
+  document.getElementById('traAmt').value='';document.getElementById('traTo').value='';
+  showToast('Transfer to @'+to+' complete');
+}
+
+function showResult(el,type,msg){
+  el.className='action-result show '+type;el.textContent=msg;
+  setTimeout(()=>el.classList.remove('show'),4000);
+}
+function setAmt(id,v){document.getElementById(id).value=v;}
+
+function switchTab(tab){
+  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  var tc=document.getElementById('tab-'+tab);
+  if(tc)tc.classList.add('active');
+  var tabs=['deposit','withdraw','transfer','history','analytics','settings'];
+  var idx=tabs.indexOf(tab);
+  var tabEls=document.querySelectorAll('.tab');
+  if(idx>=0&&tabEls[idx])tabEls[idx].classList.add('active');
+  if(tab==='analytics'){updateAnalytics();drawChart();}
+  if(tab==='history')renderHistory();
+}
+
+function renderHistory(){
+  var el=document.getElementById('histList');if(!el)return;
+  if(state.transactions.length===0){el.innerHTML='<div class="hist-empty">No transactions yet</div>';return;}
+  var icons={dep:'💵',wit:'💸',tra:'📤',rew:'🎁',int:'📈'};
+  el.innerHTML=state.transactions.map(tx=>{
+    var pos=(tx.type==='dep'||tx.type==='rew'||tx.type==='int');
+    var d=new Date(tx.time);
+    var ds=d.toLocaleDateString()+' '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    return `<div class="hist-item">
+      <div class="hist-icon ${tx.type}">${icons[tx.type]||'💱'}</div>
+      <div class="hist-meta"><div class="hist-desc">${tx.note}</div><div class="hist-time">${ds}</div></div>
+      <div class="hist-amt ${pos?'pos':'neg'}">${pos?'+':'-'}${fmt(tx.amount)}</div>
+    </div>`;
+  }).join('');
+}
+
+function clearHistory(){
+  if(confirm('Clear all transaction history?')){
+    state.transactions=[];state.totalDep=0;state.totalWit=0;state.balanceHistory=[state.balance];
+    saveState();updateUI();
+  }
+}
+
+function updateAnalytics(){
+  document.getElementById('anaTx').textContent=state.transactions.length;
+  var total=state.transactions.reduce((s,t)=>s+t.amount,0);
+  var avg=state.transactions.length?total/state.transactions.length:0;
+  document.getElementById('anaAvg').textContent=fmt(avg);
+  var deps=state.transactions.filter(t=>t.type==='dep'||t.type==='rew');
+  var wits=state.transactions.filter(t=>t.type==='wit'||t.type==='tra');
+  var maxD=deps.length?Math.max(...deps.map(t=>t.amount)):0;
+  var maxW=wits.length?Math.max(...wits.map(t=>t.amount)):0;
+  document.getElementById('anaLDep').textContent=fmt(maxD);
+  document.getElementById('anaLWit').textContent=fmt(maxW);
+}
+
+function drawChart(){
+  var canvas=document.getElementById('chart');if(!canvas)return;
+  var ctx=canvas.getContext('2d');
+  var data=state.balanceHistory.slice(-10);
+  if(data.length<2)data=[state.balance,state.balance];
+  var W=canvas.offsetWidth||400;var H=130;
+  canvas.width=W;canvas.height=H;
+  ctx.clearRect(0,0,W,H);
+  var mn=Math.min(...data),mx=Math.max(...data);
+  if(mn===mx){mn=mn*0.9;mx=mx*1.1;}
+  var pad=20;
+  function xp(i){return pad+(i/(data.length-1))*(W-2*pad);}
+  function yp(v){return H-pad-((v-mn)/(mx-mn))*(H-2*pad);}
+  ctx.beginPath();ctx.moveTo(xp(0),yp(data[0]));
+  for(var i=1;i<data.length;i++)ctx.lineTo(xp(i),yp(data[i]));
+  ctx.strokeStyle='#7c6af7';ctx.lineWidth=2.5;ctx.lineJoin='round';ctx.stroke();
+  ctx.lineTo(xp(data.length-1),H);ctx.lineTo(xp(0),H);ctx.closePath();
+  ctx.fillStyle='rgba(124,106,247,0.15)';ctx.fill();
+  ctx.beginPath();ctx.arc(xp(data.length-1),yp(data[data.length-1]),5,0,Math.PI*2);
+  ctx.fillStyle='#a78bfa';ctx.fill();
+  ctx.font='11px system-ui';ctx.fillStyle=state.isDark?'#a09ec0':'#6b6a8a';ctx.textAlign='right';
+  ctx.fillText(fmt(mx),W-2,pad+2);ctx.fillText(fmt(mn),W-2,H-pad+2);
+}
+
+function checkDailyReward(){
+  var last=parseInt(ls('bankomat_lastreward')||'0');
+  var now=Date.now();
+  var el=document.getElementById('dailyStatus');
+  var btn=document.getElementById('rewardBtn');
+  if(el){
+    if(now-last>86400000){el.textContent='Available!';el.style.color='var(--green)';if(btn)btn.disabled=false;}
+    else{var remaining=Math.ceil((86400000-(now-last))/3600000);el.textContent='In ~'+remaining+'h';el.style.color='var(--amber)';if(btn)btn.disabled=true;}
+  }
+}
+
+function claimReward(){
+  var last=parseInt(ls('bankomat_lastreward')||'0');
+  if(Date.now()-last<86400000){showToast('Come back tomorrow for your reward!');return;}
+  var reward=Math.floor(Math.random()*91)+10;
+  state.balance+=reward;state.totalDep+=reward;
+  ls('bankomat_lastreward',Date.now().toString());
+  addTransaction('rew',reward,'Daily Reward');
+  showToast('Daily reward claimed: +'+fmt(reward));checkDailyReward();
+}
+
+function startInterest(){
+  if(interestInterval)clearInterval(interestInterval);
+  interestInterval=setInterval(()=>{
+    if(document.getElementById('mainPanel').style.display==='none')return;
+    var interest=parseFloat((state.balance*0.001).toFixed(4));
+    if(interest<0.01)interest=0.01;
+    state.balance+=interest;state.interestEarned+=interest;
+    saveState();
+    document.getElementById('cardBal').textContent=fmt(state.balance);
+    updateInterestDisplay();
+  },60000);
+}
+
+function updateInterestDisplay(){
+  var el=document.getElementById('intEarned');
+  if(el)el.textContent=fmt(state.interestEarned);
+}
+
+function flyMoney(){
+  var emojis=['💵','💰','💸'];
+  for(var i=0;i<4;i++){
+    (function(idx){
+      setTimeout(()=>{
+        var el=document.createElement('div');
+        el.className='cash-fly';
+        el.textContent=emojis[Math.floor(Math.random()*emojis.length)];
+        el.style.left=(20+Math.random()*60)+'%';
+        el.style.top=(40+Math.random()*20)+'%';
+        el.style.animationDelay=(idx*0.15)+'s';
+        document.body.appendChild(el);
+        setTimeout(()=>el.remove(),1400);
+      },idx*120);
+    })(i);
+  }
+}
+
+function showToast(msg){
+  var t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2800);
+}
+
+function toggleTheme(){
+  state.isDark=!state.isDark;applyTheme();saveState();drawChart();
+}
+
+function setCurrency(v){state.currency=v;saveState();updateUI();}
+
+function resetAccount(){
+  if(confirm('Reset all account data? This cannot be undone.')){
+    localStorage.removeItem('bankomat_state');
+    localStorage.removeItem('bankomat_remember');
+    localStorage.removeItem('bankomat_lastreward');
+    location.reload();
+  }
+}
+
+function adminSetBalance(){
+  var v=parseFloat(document.getElementById('adminSetBal').value);
+  if(!v||v<0){showToast('Invalid amount');return;}
+  state.balance=v;saveState();updateUI();showToast('Balance set to '+fmt(v));
+}
+function adminAddMillion(){
+  state.balance+=10000;state.totalDep+=10000;
+  addTransaction('dep',10000,'Admin: +$10,000 injected');showToast('Added $10,000 to balance');
+}
+
+window.addEventListener('resize',drawChart);
+init();
+</script>
+</body>
+</html>
